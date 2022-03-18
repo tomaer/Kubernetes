@@ -3,11 +3,11 @@
 #### Kubernetes 是什么？
 Kubernetes 是一个可移植的、可扩展的开源平台，用于管理容器化的工作负载和服务，可促进声明式配置和自动化。 Kubernetes 拥有一个庞大且快速增长的生态系统。Kubernetes 的服务、支持和工具广泛可用。
 
-`Kubernetes` 这个名字源于希腊语，意为“舵手”或“飞行员”。k8s 这个缩写是因为 k 和 s 之间有八个字符的关系。 Google 在 2014 年开源了 Kubernetes 项目。Kubernetes 建立在 [Google 在大规模运行生产工作负载方面拥有十几年的经验](https://storage.googleapis.com/pub-tools-public-publication-data/pdf/43438.pdf) 的基础上，结合了社区中最好的想法和实践。
+`Kubernetes` 这个名字源于希腊语，意为“舵手”或“飞行员”。k8s 这个缩写是因为 k 和 s 之间有八个字符的关系。 Google 在 2014 年开源了 Kubernetes 项目。Kubernetes 建立在 [Google 在大规模运行生产工作负载方面拥有十几年的经验](https://raw.githubusercontent.com/tomaer/Kubernetes/main/images/docs/43438.pdf) 的基础上，结合了社区中最好的想法和实践。
 
 
 #### 传统部署 虚拟化部署 容器部署 对比
-![部署演进](images/docs/Container_Evolution.svg)
+![部署演进](https://raw.githubusercontent.com/tomaer/Kubernetes/main/images/docs/container_evolution.svg)
 
 **传统部署时代：**
 早期，各个组织机构在物理服务器上运行应用程序。无法为物理服务器中的应用程序定义资源边界，这会导致资源分配问题。例如，如果在物理服务器上运行多个应用程序，则可能会出现一个应用程序占用大部分资源的情况，结果可能导致其他应用程序的性能下降。一种解决方案是在不同的物理服务器上运行每个应用程序，但是由于资源利用不足而无法扩展，并且维护许多物理服务器的成本很高。
