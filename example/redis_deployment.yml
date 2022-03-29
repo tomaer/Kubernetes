@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: test
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - image: redis
+          name: redis
+          args: ["--protected-mode", "no", "--appendonly", "yes", "--dir", "/data"]
+          env:
+          - name: TZ
+            value: Asia/Shanghai
+          ports:
+          - containerPort: 6379
+            name: redis
+          volumeMounts:
+          - name: redis-data-persistent-storage
+            mountPath: /data
+      volumes:
+        - name: redis-data-persistent-storage
+          persistentVolumeClaim:
+            claimName: redis-data-pv-claim
