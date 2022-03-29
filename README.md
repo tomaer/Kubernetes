@@ -281,14 +281,14 @@ Pod （就像在鲸鱼荚或者豌豆荚中）是一组（一个或多个） 容
 
 你很少在 Kubernetes 中直接创建一个个的 Pod，甚至是单实例（Singleton）的 Pod。 这是因为 Pod 被设计成了相对临时性的、用后即抛的一次性实体。 当 Pod 由你或者间接地由 控制器 创建时，它被调度在集群中的节点上运行。 Pod 会保持在该节点上运行，直到 Pod 结束执行、Pod 对象被删除、Pod 因资源不足而被 驱逐 或者节点失效为止。
 
-### 实战部分在本地部署MySQL数据库
+### 实战部分
+* 在本地部署MySQL数据库
   - 创建`pv`  mysql_pv.yml 
     ```yaml
     apiVersion: v1
     kind: PersistentVolume
     metadata:
       name: mysql-data-pv-volume
-      namespace: test
       labels:
         type: local
     spec:
@@ -321,12 +321,11 @@ Pod （就像在鲸鱼荚或者豌豆荚中）是一组（一个或多个） 容
     ```
     ```bash
     # 创建pvc 并且查看是否绑定成功
-    $ kubectl apply -f mysql_pvc.yml
-    $ kubectl get pv
+    $ kubectl apply -f mysql_pvc.yml && kubectl get pv
     NAME                   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                      STORAGECLASS   REASON   AGE
     mysql-data-pv-volume   10Gi       RWO            Retain           Bound    test/mysql-data-pv-claim   manual                  32m
     ```
-  - 创建`deployment`
+  - 创建`deployment` mysql_deployment.yml
     ```yaml
     apiVersion: apps/v1
     kind: Deployment
@@ -365,9 +364,9 @@ Pod （就像在鲸鱼荚或者豌豆荚中）是一组（一个或多个） 容
               claimName: mysql-data-pv-claim
     ```
     ```bash
-    $ kubectl apply -f mysql_deployment.yaml
+    $ kubectl apply -f mysql_deployment.yml
     ```
-  - 创建`service` 
+  - 创建`service` mysql_service.yml
     ```yaml
     apiVersion: v1
     kind: Service
@@ -384,6 +383,107 @@ Pod （就像在鲸鱼荚或者豌豆荚中）是一组（一个或多个） 容
         app: mysql
     ```
     ```bash
-    $ kubectl apply -f mysql_service.yaml
+    $ kubectl apply -f mysql_service.yml
     ```
-
+* 在本地部署Redis
+  - 创建`pv` redis_pv.yml
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      name: redis-data-pv-volume
+      labels:
+        type: local
+    spec:
+      storageClassName: manual
+      capacity:
+        storage: 3Gi
+      accessModes:
+        - ReadWriteOnce
+      hostPath:
+        path: "/Users/tomaer/.k8s_volume/redis/data"
+    ```
+    ```bash
+    # 创建Redis data目录并且创建pv
+    $ mkdir -p /Users/tomaer/.k8s_volume/redis/data && kubectl apply -f redis_pv.yml
+    ```
+  - 创建`pvc`,并且与pv绑定 redis_pvc.yml
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: redis-data-pv-claim
+      namespace: test
+    spec:
+      storageClassName: manual
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 3Gi
+    ```
+     ```bash
+    # 创建pvc 并且查看是否绑定成功
+    $ kubectl apply -f redis_pvc.yml && kubectl get pv
+    NAME                   CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                      STORAGECLASS   REASON   AGE
+    mysql-data-pv-volume   10Gi       RWO            Retain           Bound    test/mysql-data-pv-claim   manual                  81s
+    redis-data-pv-volume   3Gi        RWO            Retain           Bound    test/redis-data-pv-claim   manual                  15s
+    ```
+  - 创建`deployment` redis_deployment.yml
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: redis
+      namespace: test
+    spec:
+      selector:
+        matchLabels:
+          app: redis
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app: redis
+        spec:
+          containers:
+            - image: redis
+              name: redis
+              args: ["--protected-mode", "no", "--appendonly", "yes", "--dir", "/data"]
+              env:
+              - name: TZ
+                value: Asia/Shanghai
+              ports:
+              - containerPort: 6379
+                name: redis
+              volumeMounts:
+              - name: redis-data-persistent-storage
+                mountPath: /data
+          volumes:
+            - name: redis-data-persistent-storage
+              persistentVolumeClaim:
+                claimName: redis-data-pv-claim
+    ```
+    ```bash
+    $ kubectl apply -f redis_deployment.yml
+    ```
+  - 创建`Service`, redis_service.yml
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: redis
+      namespace: test
+    spec:
+      type: NodePort
+      ports:
+      - port: 6379
+        targetPort: 6379
+        nodePort: 30079
+      selector:
+        app: redis
+    ```
+    ```bash
+    $ kubectl apply -f redis_service.yml
+    ```
