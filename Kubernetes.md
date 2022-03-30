@@ -47,6 +47,7 @@ Kubernetes 集群中的 Pod 主要有两种用法：
   <br>
 * 运行多个协同工作的容器的`Pod`。 
   `Pod`可能封装由多个紧密耦合且需要共享资源的共处容器组成的应用程序。这些位于同一位置的容器可能形成单个内聚的服务单元。例如：一个容器将文件从共享卷提供给公众， 而另一个单独的“边车”（sidecar）容器则刷新或更新这些文件。 Pod 将这些容器和存储资源打包为一个可管理的实体。
+  <br>
   <img src="/images/docs/pod.svg" width="450px;">
 
 <br>
@@ -155,7 +156,7 @@ Kubernetes 支持很多类型的卷。 Pod 可以同时使用任意数目的卷�
     HostPath 卷存在许多安全风险，最佳做法是尽可能避免使用 HostPath。 当必须使用 HostPath 卷时，它的范围应仅限于所需的文件或目录，并以只读方式挂载。
     如果通过 AdmissionPolicy 限制 HostPath 对特定目录的访问，则必须要求 volumeMounts 使用 readOnly 挂载以使策略生效。
 
-    `hostPath`卷能将主机节点文件系统上的文件或目录挂载到你的 Pod 中。 虽然这不是大多数 Pod 需要的，但是它为一些应用程序提供了强大的逃生舱。
+    `hostPath`卷能将主机节点文件系统上的文件或目录挂载到你的`Pod`中。虽然这不是大多数`Pod`需要的，但是它为一些应用程序提供了强大的逃生舱。
     例如，`hostPath`的一些用法有：
     - 运行一个需要访问 Docker 内部机制的容器；可使用 hostPath 挂载 /var/lib/docker 路径。
     - 在容器中运行`cAdvisor`时，以`hostPath`方式挂载 /sys。
