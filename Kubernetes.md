@@ -69,14 +69,15 @@ Kubernetes 集群中的 Pod 主要有两种用法：
 Pod 模板是包含在工作负载对象中的规范，用来创建`Pod`。这类负载资源包括`Deployment`、 `Job` 和 `DaemonSets`等。
 工作负载的控制器会使用负载对象中的 PodTemplate 来生成实际的 Pod。 PodTemplate 是你用来运行应用时指定的负载资源的目标状态的一部分。
 ```yaml
-apiVersion: batch/v1
-kind: Job
+apiVersion: app/v1
+kind: Deployment
 metadata:
   name: hello
 spec:
   template:
     # 这里是 Pod 模版
     spec:
+      replicas: 1
       containers:
       - name: hello
         image: busybox
@@ -93,3 +94,140 @@ spec:
 1. `ExecAction`（借助容器运行时执行）
 2. `TCPSocketAction`（由 kubelet 直接检测）
 3. `HTTPGetAction`（由 kubelet 直接检测）
+
+
+### Kubernetes Storage
+1. Volumes / 卷
+2. Persistent Volumes / 持久卷
+3. Projected Volumes / 投射卷
+4. Ephemeral Volumes / 临时卷
+5. Storage Classes / 存储类
+6. Dynamic Volume Provisioning / 动态卷供应
+7. Volume Snapshots / 卷快照
+8. Volume Snapshot Classes / 卷快照类
+9. CSI Volume Cloning / CSI 卷克隆
+10. Storage Capacity / 存储容量 
+11. Node-specific Volume Limits / 特定于节点的卷数限制
+12. Volume Health Monitoring / 卷健康监测
+
+###### Volumes
+Container 中的文件在磁盘上是临时存放的，这给 Container 中运行的较重要的应用程序带来一些问题。 问题之一是当容器崩溃时文件丢失。 kubelet 会重新启动容器，但容器会以干净的状态重启。 第二个问题会在同一 Pod 中运行多个容器并共享文件时出现。 Kubernetes 卷（Volume） 这一抽象概念能够解决这两个问题。
+
+Docker 也有 卷（Volume） 的概念，但对它只有少量且松散的管理。 Docker 卷是磁盘上或者另外一个容器内的一个目录。 Docker 提供卷驱动程序，但是其功能非常有限。
+
+Kubernetes 支持很多类型的卷。 Pod 可以同时使用任意数目的卷类型。 临时卷类型的生命周期与 Pod 相同，但持久卷可以比 Pod 的存活期长。 当 Pod 不再存在时，Kubernetes 也会销毁临时卷；不过 Kubernetes 不会销毁持久卷。 对于给定 Pod 中任何类型的卷，在容器重启期间数据都不会丢失。
+
+卷的核心是一个目录，其中可能存有数据，Pod 中的容器可以访问该目录中的数据。 所采用的特定的卷类型将决定该目录如何形成的、使用何种介质保存数据以及目录中存放的内容。
+
+##### 25种卷类型
+  - local
+    `local`卷所代表的是某个被挂载的本地存储设备，例如磁盘、分区或者目录。  
+    `local`卷只能用作静态创建的持久卷。尚不支持动态配置。
+    与`hostPath`卷相比，`local`卷能够以持久和可移植的方式使用，而无需手动将`Pod`调度到节点。系统通过查看 `PersistentVolume`的节点亲和性配置，就能了解卷的节点约束。
+    然而，local 卷仍然取决于底层节点的可用性，并不适合所有应用程序。 如果节点变得不健康，那么 local 卷也将变得不可被 Pod 访问。使用它的 Pod 将不能运行。 使用 local 卷的应用程序必须能够容忍这种可用性的降低，以及因底层磁盘的耐用性特征而带来的潜在的数据丢失风险。
+    下面是一个使用`local`卷和`nodeAffinity`的持久卷示例：
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      name: example-pv
+    spec:
+      capacity:
+        storage: 100Gi
+      volumeMode: Filesystem
+      accessModes:
+      - ReadWriteOnce
+      persistentVolumeReclaimPolicy: Delete
+      storageClassName: local-storage
+      local:
+        path: /mnt/disks/ssd1
+      nodeAffinity:
+        required:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+              - example-node
+    ```
+  - hostPath
+    >警告：
+    HostPath 卷存在许多安全风险，最佳做法是尽可能避免使用 HostPath。 当必须使用 HostPath 卷时，它的范围应仅限于所需的文件或目录，并以只读方式挂载。
+    如果通过 AdmissionPolicy 限制 HostPath 对特定目录的访问，则必须要求 volumeMounts 使用 readOnly 挂载以使策略生效。
+
+    `hostPath`卷能将主机节点文件系统上的文件或目录挂载到你的 Pod 中。 虽然这不是大多数 Pod 需要的，但是它为一些应用程序提供了强大的逃生舱。
+    例如，`hostPath`的一些用法有：
+    - 运行一个需要访问 Docker 内部机制的容器；可使用 hostPath 挂载 /var/lib/docker 路径。
+    - 在容器中运行`cAdvisor`时，以`hostPath`方式挂载 /sys。
+    - 允许`Pod`指定给定的`hostPath`在运行 Pod 之前是否应该存在，是否应该创建以及应该以什么方式存在。
+  
+    支持的 type 值如下：
+    |  取值   | 行为  |
+    |  ----  | ----  |
+    |   | 空字符串（默认）用于向后兼容，这意味着在安装 hostPath 卷之前不会执行任何检查。 |
+    | DirectoryOrCreate  | 如果在给定路径上什么都不存在，那么将根据需要创建空目录，权限设置为 0755，具有与 kubelet 相同的组和属主信息。 |
+    | Directory | 在给定路径上必须存在的目录。 |
+    | FileOrCreate | 如果在给定路径上什么都不存在，那么将在那里根据需要创建空文件，权限设置为 0644，具有与 kubelet 相同的组和所有权。|
+    | File | 在给定路径上必须存在的文件。|
+    | Socket | 在给定路径上必须存在的 UNIX 套接字。|
+    | CharDevice | 在给定路径上必须存在的字符设备。|
+    | BlockDevice | 在给定路径上必须存在的块设备。|
+
+    当使用这种类型的卷时要小心，因为：
+    - HostPath 卷可能会暴露特权系统凭据（例如 Kubelet）或特权 API（例如容器运行时套接字），可用于容器逃逸或攻击集群的其他部分。
+    - 具有相同配置（例如基于同一 PodTemplate 创建）的多个 Pod 会由于节点上文件的不同而在不同节点上有不同的行为。
+    - 下层主机上创建的文件或目录只能由 root 用户写入。你需要在 特权容器 中以 root 身份运行进程，或者修改主机上的文件权限以便容器能够写入 hostPath 卷。
+
+    `hostPath` 配置示例：
+    ```yaml
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: test-pd
+    spec:
+      containers:
+      - image: k8s.gcr.io/test-webserver
+        name: test-container
+        volumeMounts:
+        - mountPath: /test-pd
+          name: test-volume
+      volumes:
+      - name: test-volume
+        hostPath:
+          # 宿主上目录位置
+          path: /data
+          # 此字段为可选
+          type: Directory
+    ```
+
+  - nfs
+  - secret
+  - configMap
+  - persistentVolumeClaim
+  - awsElasticBlockStore
+  - azureDisk
+  - azureFile
+  - cephfs
+  - cinder
+  - downwardAPI
+  - emptyDir
+  - fc (光纤通道)
+  - flocker （已弃用）
+  - gcePersistentDisk
+  - gitRepo (已弃用) 
+  - glusterfs
+  - iscsi
+  - portworxVolume
+  - projected （投射）
+  - quobyte (已弃用)
+  - rbd
+  - storageOS (已弃用)
+  - vsphereVolume
+
+
+
+   
+   
+   
+   
+
