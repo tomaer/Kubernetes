@@ -111,7 +111,7 @@ spec:
 11. Node-specific Volume Limits / 特定于节点的卷数限制
 12. Volume Health Monitoring / 卷健康监测
 
-###### Volumes
+##### Volumes / 卷
 Container 中的文件在磁盘上是临时存放的，这给 Container 中运行的较重要的应用程序带来一些问题。 问题之一是当容器崩溃时文件丢失。 kubelet 会重新启动容器，但容器会以干净的状态重启。 第二个问题会在同一 Pod 中运行多个容器并共享文件时出现。 Kubernetes 卷（Volume） 这一抽象概念能够解决这两个问题。
 
 Docker 也有 卷（Volume） 的概念，但对它只有少量且松散的管理。 Docker 卷是磁盘上或者另外一个容器内的一个目录。 Docker 提供卷驱动程序，但是其功能非常有限。
@@ -120,7 +120,7 @@ Kubernetes 支持很多类型的卷。 Pod 可以同时使用任意数目的卷�
 
 卷的核心是一个目录，其中可能存有数据，Pod 中的容器可以访问该目录中的数据。 所采用的特定的卷类型将决定该目录如何形成的、使用何种介质保存数据以及目录中存放的内容。
 
-##### 25种卷类型
+###### 25种卷类型
   - local
     `local`卷所代表的是某个被挂载的本地存储设备，例如磁盘、分区或者目录。  
     `local`卷只能用作静态创建的持久卷。尚不支持动态配置。
@@ -202,9 +202,54 @@ Kubernetes 支持很多类型的卷。 Pod 可以同时使用任意数目的卷�
     ```
 
   - nfs
+    nfs 卷能将 NFS (网络文件系统) 挂载到你的 Pod 中。 不像 emptyDir 那样会在删除 Pod 的同时也会被删除，nfs 卷的内容在删除 Pod 时会被保存，卷只是被卸载。 这意味着 nfs 卷可以被预先填充数据，并且这些数据可以在 Pod 之间共享。
+    ```bash
+    # 安装NFS和RPC
+    $ yum -y install nfs-utils rpcbind
+    # 配置nfs目录
+    # 新建data目录
+    $ mkdir /data
+    # 在文件/etc/exports添加如下内容
+    $ echo '/data *(rw,no_root_squash,sync)' >> /etc/exports
+    # 执行命令使配置生效
+    $ exportfs -r
+    # 配置完成后，启动 NFS 服务器
+    $ systemctl enable nfs-server && systemctl start nfs-server
+    # 验证
+    $ showmount -e
+    Export list for instance-cesz58w0:
+    /data *
+    ```
   - secret
+    secret 卷用来给 Pod 传递敏感信息，例如密码, SSL证书，RSA秘钥对等
+
   - configMap
+    configMap 卷提供了向 Pod 注入配置数据的方法。 ConfigMap 对象中存储的数据可以被 configMap 类型的卷引用，然后被 Pod 中运行的容器化应用使用。
+    引用 configMap 对象时，你可以在 volume 中通过它的名称来引用。 你可以自定义 ConfigMap 中特定条目所要使用的路径。 下面的配置显示了如何将名为 log-config 的 ConfigMap 挂载到名为 configmap-pod 的 Pod 中：
+    ```yaml
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: configmap-pod
+    spec:
+      containers:
+      - name: test
+        image: busybox
+        volumeMounts:
+          - name: config-vol
+            mountPath: /etc/config
+      volumes:
+        - name: config-vol
+          configMap:
+            name: log-config
+            items:
+              - key: log_level
+                path: log_level
+    ```
+
   - persistentVolumeClaim
+    persistentVolumeClaim 卷用来将持久卷（PersistentVolume）挂载到 Pod 中。 持久卷申领（PersistentVolumeClaim）是用户在不知道特定云环境细节的情况下“申领”持久存储（例如 GCE PersistentDisk 或者 iSCSI 卷）的一种方法。
+
   - awsElasticBlockStore
   - azureDisk
   - azureFile
@@ -224,6 +269,80 @@ Kubernetes 支持很多类型的卷。 Pod 可以同时使用任意数目的卷�
   - rbd
   - storageOS (已弃用)
   - vsphereVolume
+
+##### Persistent Volumes / 持久卷
+持久卷（PersistentVolume，PV）是集群中的一块存储，可以由管理员事先供应，或者 使用存储类（Storage Class）来动态供应。 持久卷是集群资源，就像节点也是集群资源一样。PV 持久卷和普通的 Volume 一样，也是使用 卷插件来实现的，只是它们拥有独立于任何使用 PV 的 Pod 的生命周期。 此 API 对象中记述了存储的实现细节，无论其背后是 NFS、iSCSI 还是特定于云平台的存储系统。
+
+持久卷申领（PersistentVolumeClaim，PVC）表达的是用户对存储的请求。概念上与 Pod 类似。 Pod 会耗用节点资源，而 PVC 申领会耗用 PV 资源。Pod 可以请求特定数量的资源（CPU 和内存）；同样 PVC 申领也可以请求特定的大小和访问模式 （例如，可以要求 PV 卷能够以 ReadWriteOnce、ReadOnlyMany 或 ReadWriteMany 模式之一来挂载，参见访问模式）。
+
+尽管 PersistentVolumeClaim 允许用户消耗抽象的存储资源，常见的情况是针对不同的 问题用户需要的是具有不同属性（如，性能）的 PersistentVolume 卷。 集群管理员需要能够提供不同性质的 PersistentVolume，并且这些 PV 卷之间的差别不 仅限于卷大小和访问模式，同时又不能将卷是如何实现的这些细节暴露给用户。 为了满足这类需求，就有了 存储类（StorageClass） 资源。
+
+###### 卷和申领的生命周期
+- 供应 (PV 卷的供应有两种方式：静态供应或动态供应)
+  > 静态供应:
+  集群管理员创建若干 PV 卷。这些卷对象带有真实存储的细节信息，并且对集群 用户可用（可见）。PV 卷对象存在于 Kubernetes API 中，可供用户消费（使用）。
+  动态供应:
+  如果管理员所创建的所有静态 PV 卷都无法与用户的 PersistentVolumeClaim 匹配， 集群可以尝试为该 PVC 申领动态供应一个存储卷。 这一供应操作是基于 StorageClass 来实现的：PVC 申领必须请求某个 存储类，同时集群管理员必须 已经创建并配置了该类，这样动态供应卷的动作才会发生。 如果 PVC 申领指定存储类为 ""，则相当于为自身禁止使用动态供应的卷。
+  为了基于存储类完成动态的存储供应，集群管理员需要在 API 服务器上启用 DefaultStorageClass 准入控制器。 举例而言，可以通过保证 DefaultStorageClass 出现在 API 服务器组件的 --enable-admission-plugins 标志值中实现这点；该标志的值可以是逗号 分隔的有序列表。关于 API 服务器标志的更多信息，可以参考 kube-apiserver 文档。
+- 绑定
+  用户创建一个带有特定存储容量和特定访问模式需求的 PersistentVolumeClaim 对象； 在动态供应场景下，这个 PVC 对象可能已经创建完毕。 主控节点中的控制回路监测新的 PVC 对象，寻找与之匹配的 PV 卷（如果可能的话）， 并将二者绑定到一起。 如果为了新的 PVC 申领动态供应了 PV 卷，则控制回路总是将该 PV 卷绑定到这一 PVC 申领。 否则，用户总是能够获得他们所请求的资源，只是所获得的 PV 卷可能会超出所请求的配置。 一旦绑定关系建立，则 PersistentVolumeClaim 绑定就是排他性的，无论该 PVC 申领是 如何与 PV 卷建立的绑定关系。 PVC 申领与 PV 卷之间的绑定是一种一对一的映射，实现上使用 ClaimRef 来记述 PV 卷 与 PVC 申领间的双向绑定关系。
+
+  如果找不到匹配的 PV 卷，PVC 申领会无限期地处于未绑定状态。 当与之匹配的 PV 卷可用时，PVC 申领会被绑定。 例如，即使某集群上供应了很多 50 Gi 大小的 PV 卷，也无法与请求 100 Gi 大小的存储的 PVC 匹配。当新的 100 Gi PV 卷被加入到集群时，该 PVC 才有可能被绑定。
+- 使用
+  Pod 将 PVC 申领当做存储卷来使用。集群会检视 PVC 申领，找到所绑定的卷，并 为 Pod 挂载该卷。对于支持多种访问模式的卷，用户要在 Pod 中以卷的形式使用申领 时指定期望的访问模式。
+
+  一旦用户有了申领对象并且该申领已经被绑定，则所绑定的 PV 卷在用户仍然需要它期间 一直属于该用户。用户通过在 Pod 的 volumes 块中包含 persistentVolumeClaim 节区来调度 Pod，访问所申领的 PV 卷。 相关细节可参阅使用申领作为卷。
+
+- 保护使用中的存储对象
+  保护使用中的存储对象（Storage Object in Use Protection）这一功能特性的目的 是确保仍被 Pod 使用的 PersistentVolumeClaim（PVC）对象及其所绑定的 PersistentVolume（PV）对象在系统中不会被删除，因为这样做可能会引起数据丢失。<br>
+  如果用户删除被某 Pod 使用的 PVC 对象，该 PVC 申领不会被立即移除。 PVC 对象的移除会被推迟，直至其不再被任何 Pod 使用。 此外，如果管理员删除已绑定到某 PVC 申领的 PV 卷，该 PV 卷也不会被立即移除。 PV 对象的移除也要推迟到该 PV 不再绑定到 PVC。
+  ```bash
+  $ kubectl describe pvc hostpath
+  Name:          hostpath
+  Namespace:     default
+  StorageClass:  example-hostpath
+  Status:        Terminating
+  Volume:
+  Labels:        <none>
+  Annotations:   volume.beta.kubernetes.io/storage-class=example-hostpath
+                 volume.beta.kubernetes.io/storage-provisioner=example.com/hostpath
+  Finalizers:    [kubernetes.io/pvc-protection]
+  ...
+
+  $ kubectl describe pv task-pv-volume
+  Name:            task-pv-volume
+  Labels:          type=local
+  Annotations:     <none>
+  Finalizers:      [kubernetes.io/pv-protection]
+  StorageClass:    standard
+  Status:          Terminating
+  Claim:
+  Reclaim Policy:  Delete
+  Access Modes:    RWO
+  Capacity:        1Gi
+  Message:
+  Source:
+    Type:          HostPath (bare host directory volume)
+    Path:          /tmp/data
+    HostPathType:
+  Events:          <none>
+  ```
+- 回收
+  当用户不再使用其存储卷时，他们可以从 API 中将 PVC 对象删除，从而允许 该资源被回收再利用。PersistentVolume 对象的回收策略告诉集群，当其被 从申领中释放时如何处理该数据卷。 目前，数据卷可以被 Retained（保留）、Recycled（回收）或 Deleted（删除）。
+- 保留（Retain）
+  回收策略 Retain 使得用户可以手动回收资源。当 PersistentVolumeClaim 对象 被删除时，PersistentVolume 卷仍然存在，对应的数据卷被视为"已释放（released）"。 由于卷上仍然存在这前一申领人的数据，该卷还不能用于其他申领。 管理员可以通过下面的步骤来手动回收该卷：
+    1. 删除 PersistentVolume 对象。与之相关的、位于外部 2. 基础设施中的存储资产 （例如 AWS EBS、GCE PD、Azure Disk 或 Cinder 卷）在 PV 删除之后仍然存在。
+    2. 根据情况，手动清除所关联的存储资产上的数据。
+    3. 手动删除所关联的存储资产。
+   
+  如果你希望重用该存储资产，可以基于存储资产的定义创建新的 PersistentVolume 卷对象。
+
+  ### Kubernetes 中的代理
+  用户在使用 Kubernetes 的过程中可能遇到几种不同的代理（proxy）：
+  1. kubectl proxy：
+       - 运行在用户的桌面或 pod 中
+       - 从本机地址到 Kubernetes apiserver 的代理
+
 
 
 
