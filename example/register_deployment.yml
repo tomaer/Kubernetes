@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: register-server
+  namespace: test
+spec:
+  selector:
+    matchLabels:
+      app: register-server
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: register-server
+    spec:
+      containers:
+      - image: registry.gobuildrun.com/operation-br-app-engine/eureka-server:2019.8.2-180723-master
+        name: register-server
+        env:
+        - name: TZ
+          value: Asia/Shanghai
+        ports:
+        - containerPort: 8000
+          name: register-server

@@ -557,28 +557,6 @@ spec:
     # 在项目根目录下执行
     $ ansible-playbook -i inventory.ini 99-reset-cluster.yml
     ```
-### 本地伪集群环境的安装
-  - 安装Docker Desktop
-  - 配置proxy
-    ```bash
-    {
-        "registry-mirrors": [
-            "https://6n5qzb8y.mirror.aliyuncs.com"
-        ],
-        "features": {
-            "buildkit": true
-        },
-        "experimental": false,
-        "builder": {
-            "gc": {
-                "defaultKeepStorage": "20GB",
-                "enabled": true
-            }
-        }
-    }
-    ```
-- 安装 Kubernetes
-  ![Install Kubernetes with Mac Docker Desktop](/images/docs/WeChatWorkScreenshot_275776cd-a785-4e1f-926f-dce293eb6b7e.png)
 
 ###### 常用的kubectl命令，使用频率比较高
   * 查看集群中的节点`node`
@@ -683,6 +661,87 @@ spec:
     tmis-service-3558f-74c6c95d98-8fvj8              1/1     Running   0          4d6h    10.244.63.108   172.16.0.3    <none>           <none>
     websocket-service-node-0c75b-6767887999-vgfxh    1/1     Running   0          6d9h    10.244.63.103   172.16.0.3    <none>           <none>
     ```
+  * 查看`Pod`日志
+    ```bash
+    $ kubectl logs -f --tail 100 register-server-66ddbbb8dd-wfg9d -n test                      
+    2022-03-31 11:46:23.766  INFO 8 --- [           main] s.c.a.AnnotationConfigApplicationContext : Refreshing org.springframework.context.annotation.AnnotationConfigApplicationContext@3840857a: startup date [Thu Mar 31 11:46:23 CST 2022]; root of context hierarchy
+    2022-03-31 11:46:24.999  INFO 8 --- [           main] f.a.AutowiredAnnotationBeanPostProcessor : JSR-330 'javax.inject.Inject' annotation found and supported for autowiring
+    2022-03-31 11:46:25.124  INFO 8 --- [           main] trationDelegate$BeanPostProcessorChecker : Bean 'configurationPropertiesRebinderAutoConfiguration' of type [org.springframework.cloud.autoconfigure.ConfigurationPropertiesRebinderAutoConfiguration$$EnhancerBySpringCGLIB$$85791552] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying)
+ 
+    :: Spring Boot ::       (v1.5.14.RELEASE)
+
+    2022-03-31 11:46:26.447  INFO 8 --- [           main] i.c.eureka.EurekaServerApplication       : No active profile set, falling back to default profiles: default
+    2022-03-31 11:46:26.643  INFO 8 --- [           main] ationConfigEmbeddedWebApplicationContext : Refreshing org.springframework.boot.context.embedded.AnnotationConfigEmbeddedWebApplicationContext@1ccf5eb6: startup date [Thu Mar 31 11:46:26 CST 2022]; parent: org.springframework.context.annotation.AnnotationConfigApplicationContext@3840857a
+    2022-03-31 11:46:31.067  INFO 8 --- [           main] o.s.cloud.context.scope.GenericScope     : BeanFactory id=d15ce2be-bd6d-35e1-9286-e87328d18d89
+    ```
+  * 配置SSL证书
+    ```bash
+    # 全新配置
+    $ kubectl create secret tls 证书名称 --cert=pem格式的证书路径 --key=key格式的证书路径 -n namespace
+    ```
+    ```yaml
+    # 在Ingress中添加
+    tls:
+    - hosts:
+      - minio-tmis.timework.cn
+      secretName: tmis.timework.cn
+    ```
+    ```yaml
+    # 猪齿鱼部署
+    ingress:
+      enabled: true
+      annotations: {}
+      path: /
+      host: minio-tmis.timework.cn
+      tls:
+        enabled: true
+        secretName: tmis.timework.cn
+    ```
+  * 更新SSL证书
+    更新证书的话，可以按照上面的步骤重新创建一个`secret`对象，并且更新Ingress或者更新在猪齿鱼上的配置即可，如果没有pem和key格式的证书文件，已知别的Ingress的证书已经修改好，则可以用下面方法
+    ```bash
+    # 查看已更新好的证书，并记录tls.crt和tls.key部分
+    $ kubectl get secret scrm.timework.cn -n scrm-prod -o=yaml
+    # 修改需要更新的证书`secret`对象，并将tls.crt和tls.key部分进行替换即可
+    $ kubectl edit secret tmis.timework.cn -n prod-tmis
+    ```
+    ```yaml
+    # 替换完成的Secret对象
+    apiVersion: v1
+    kind: Secret
+    type: kubernetes.io/tls
+    metadata:
+      name: tmis.timework.cn
+      namespace: prod-tmis
+    data:
+      tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZnVENDQkdtZ0F3SUJBZ0lRQ3RIVHFoL0RpVmNPcUtmNXp4M3pWREFOQmdrcWhraUc5dzBCQVFzRkFEQnUKTVFzd0NRWURWUVFHRXdKVlV6RVZNQk1HQTFVRUNoTU1SR2xuYVVObGNuUWdTVzVqTVJrd0Z3WURWUVFMRXhCMwpkM2N1WkdsbmFXTmxjblF1WTI5dE1TMHdLd1lEVlFRREV5UkZibU55ZVhCMGFXOXVJRVYyWlhKNWQyaGxjbVVnClJGWWdWRXhUSUVOQklDMGdSekV3SGhjTk1qRXdNek14TURBd01EQXdXaGNOTWpJd016TXhNak0xT1RVNVdqQVkKTVJZd0ZBWURWUVFEREEwcUxuUnBiV1YzYjNKckxtTnVNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QQpNSUlCQ2dLQ0FRRUE3KzlyOFIxM1VCeTlRVlBGa0tDdjRvK2dOSE9uRTJMWEs5MjljbUY1WEN2Qk5wb0FndmJ1CjMvY2llYXRKZ2dzL25reG1iaWF6UnRyV1RxVjVpdWJsQitKNTFTdlVYa3NGY1lLZmYyNzJOYzRBRVhOd1lFcFoKZmE2SXI1UDRMS2dOdExyYVZreGZBZjFPVzJReWVLci9JNTRDLy9iN3FBMGFDL2lNZVppOTlZanFCUUl1cjBzRApDRUVzVDdacHZNTUp0RVErQzRSendzeVlEYUh0Q0ZwRFZuWDBKU21pUnNlYWdUNkpHdkpSVHJreTlqVDZ3TVNDCkhjR1grdjVmTnc4M3ZJdUxvM2N3TlhodWVMTGZ2T3NTU2dodHhWOFp4dmMxT3R5NFdCZWJSemJrdXhuNVhGQlcKZUVjVXYxSEFhclEyR0hlVWUydjJFTFVnUURaK0ZpakVad0lEQVFBQm80SUNiekNDQW1zd0h3WURWUjBqQkJndwpGb0FVVlhSUHNuSlA5V0M2VU5IWDVsRmNtZ0dIR3Rjd0hRWURWUjBPQkJZRUZOTHZJdnJqY2JpWmo5WDFrM25GCmhrdHVSZi8vTUNVR0ExVWRFUVFlTUJ5Q0RTb3VkR2x0WlhkdmNtc3VZMjZDQzNScGJXVjNiM0pyTG1OdU1BNEcKQTFVZER3RUIvd1FFQXdJRm9EQWRCZ05WSFNVRUZqQVVCZ2dyQmdFRkJRY0RBUVlJS3dZQkJRVUhBd0l3UGdZRApWUjBnQkRjd05UQXpCZ1puZ1F3QkFnRXdLVEFuQmdnckJnRUZCUWNDQVJZYmFIUjBjRG92TDNkM2R5NWthV2RwClkyVnlkQzVqYjIwdlExQlRNSUdBQmdnckJnRUZCUWNCQVFSME1ISXdKQVlJS3dZQkJRVUhNQUdHR0doMGRIQTYKTHk5dlkzTndMbVJwWjJsalpYSjBMbU52YlRCS0JnZ3JCZ0VGQlFjd0FvWSthSFIwY0RvdkwyTmhZMlZ5ZEhNdQpaR2xuYVdObGNuUXVZMjl0TDBWdVkzSjVjSFJwYjI1RmRtVnllWGRvWlhKbFJGWlVURk5EUVMxSE1TNWpjblF3CkNRWURWUjBUQkFJd0FEQ0NBUU1HQ2lzR0FRUUIxbmtDQkFJRWdmUUVnZkVBN3dCMkFDbDV2dkNlT1RraDhGWnoKbjJPbGQrVytWMzJjWUFyNCtVMWRKbHdsWGNlRUFBQUJlSWM5Um9JQUFBUURBRWN3UlFJZ1lQeDFoOFUwYVJISwo0STNHblI2bTREb0NrU3RQVGM4ZkU4OXZWdkZCUURNQ0lRQ1RaeUhNVnFIY0JwMGhqclpBT2NPQnJkWm0rb3E0CnRsV2w3WFZrUUV0bllBQjFBQ0pGUlFkWlZTUldsaitoTC9IM2JZYmdJeVpqcmNCTGYxM0dnMXh1NGc4Q0FBQUIKZUljOVJ0a0FBQVFEQUVZd1JBSWdQdkl4RHVveXhnd3YwRHNOQTNyYjhBQ3Y5U00zUHpPMkVpWVBId0Q0eW40QwpJSFdMN3NQRWE3UHZTbWd4RUxuRTM0bFZhWFZDUmRWakQ4Yi9HVjIraXJYRE1BMEdDU3FHU0liM0RRRUJDd1VBCkE0SUJBUUN1dFE4NGxoSmdmY01nSmNJOVFQQ0E2L0M0K2VXZGs0bGR4MEtyTXF0VWJONGsxVmxqYXFFL2hnMWcKNjlLcHFuenlRKzRNUWJlakV6NUhHL0ZySjQwa3VaaGs1eTVXYmE2RUlBMVEvT2hzaVRtcXh1ZzhTckRoVHZoKwp5T0lCYkNlQVZ2M0lWazEwbEVKdkpZSElMaUU5SEJhb2Eybm13ODArdVJVNDg4SU1JQkRZZFpWOVMwcjJJYlRiCkQ4LythN1RvbExsSFlCYm01UmpSMHBsbDBlS2I0Y2VUMlZwajI5LzhSSjhXR09XOU1PSTB1bVRSRmpBYWRjK3IKRmVIc0R3dWdJTk1YdXlhSWZzTVQrSmFzQ0tEMGE3ayt5NGZ4ZXlkcENDMTdRdUtjcDBoTk1ETWdySGhYS1cxYQphczFyN3BlbFE4dk5VTzlSNldKaktteXZDeHVLCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0KLS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUVxakNDQTVLZ0F3SUJBZ0lRQW5tc1JZdkJza1dyK1lCVHpTeWJzVEFOQmdrcWhraUc5dzBCQVFzRkFEQmgKTVFzd0NRWURWUVFHRXdKVlV6RVZNQk1HQTFVRUNoTU1SR2xuYVVObGNuUWdTVzVqTVJrd0Z3WURWUVFMRXhCMwpkM2N1WkdsbmFXTmxjblF1WTI5dE1TQXdIZ1lEVlFRREV4ZEVhV2RwUTJWeWRDQkhiRzlpWVd3Z1VtOXZkQ0JEClFUQWVGdzB4TnpFeE1qY3hNalEyTVRCYUZ3MHlOekV4TWpjeE1qUTJNVEJhTUc0eEN6QUpCZ05WQkFZVEFsVlQKTVJVd0V3WURWUVFLRXd4RWFXZHBRMlZ5ZENCSmJtTXhHVEFYQmdOVkJBc1RFSGQzZHk1a2FXZHBZMlZ5ZEM1agpiMjB4TFRBckJnTlZCQU1USkVWdVkzSjVjSFJwYjI0Z1JYWmxjbmwzYUdWeVpTQkVWaUJVVEZNZ1EwRWdMU0JICk1UQ0NBU0l3RFFZSktvWklodmNOQVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQUxQZVA2d2thYjQxZHlRaDZtS2MKb0hxdDNqUkl4VzVNRHZmOVF5aU9SN1ZmRndLNjU2ZXMwVUZpSWI3NE45cFJudHpGMVVnWXpER3UzcHBaVk1kbwpsYnhobTZkV1M5T0svbEZlaEtOVDBPWUk5YXFrNkYrVTdjQTZqeFNDK2lEQlBYd2RGNHJzM0tSeXAzYVFuNnBqCnBwMXlyN0lCNlk0enY3MkVlL1BsWi82cks2SW5DNldwSzBuUFZPWVI3bjlpRHVQZTFFNEl4VU1CSC9UMzMrM2gKeXVIM2R2ZmdpV1VPVWtqZHBNYnl4WCtYTmxlNXVFSWl5QnNpNEl2YmNUQ2g4cnVpZkNJaTVtRFhrWnJuTVQ4bgp3ZllDVjZ2NmtEZFhrYmdHUkxLc1I0cHVjYkp0YktxSWtVR3h1WkkydDdwZmV3S1JjNW5XZWN2REJaZjMrcDFNCnBBOENBd0VBQWFPQ0FVOHdnZ0ZMTUIwR0ExVWREZ1FXQkJSVmRFK3ljay8xWUxwUTBkZm1VVnlhQVljYTF6QWYKQmdOVkhTTUVHREFXZ0JRRDNsQTFWdEZNdTJid28rSWJHOE9Yc2ozUlZUQU9CZ05WSFE4QkFmOEVCQU1DQVlZdwpIUVlEVlIwbEJCWXdGQVlJS3dZQkJRVUhBd0VHQ0NzR0FRVUZCd01DTUJJR0ExVWRFd0VCL3dRSU1BWUJBZjhDCkFRQXdOQVlJS3dZQkJRVUhBUUVFS0RBbU1DUUdDQ3NHQVFVRkJ6QUJoaGhvZEhSd09pOHZiMk56Y0M1a2FXZHAKWTJWeWRDNWpiMjB3UWdZRFZSMGZCRHN3T1RBM29EV2dNNFl4YUhSMGNEb3ZMMk55YkRNdVpHbG5hV05sY25RdQpZMjl0TDBScFoybERaWEowUjJ4dlltRnNVbTl2ZEVOQkxtTnliREJNQmdOVkhTQUVSVEJETURjR0NXQ0dTQUdHCi9Xd0JBakFxTUNnR0NDc0dBUVVGQndJQkZoeG9kSFJ3Y3pvdkwzZDNkeTVrYVdkcFkyVnlkQzVqYjIwdlExQlQKTUFnR0JtZUJEQUVDQVRBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQUszR3A2L2FHcTdhQlpzeGYvb1ErVEQvQgpTd1czQVU0RVRLK0dRZjJrRnpZWmtieTVTRnJIZFBvbXVueDJIQnpWaVVjaEdvb2ZHZ2c3Z0hXMFczTWxRQVhXCk0wcjVMVXZTdGNyODJRRFdZTlBhVXk0dGFDUW15YUorVkIrNnd4SHN0U2lnT2xTTkYyYTZ2ZzRyZ2V4aXhlaVYKNFlTQjAzWXFwMnQzVGVaSE05RVNma3VzNzRuUXlXN3BSR2V6aitUQzQ0eENhZ0NRUU96ek5tekVBUDJTbkNySgpzTkUyRHBSVk1uTDhKNnhCUmRqbU9zQzNONmNRdUt1UlhiekJ5VkJqQ3FBQTh0MUwwSSs5d1hKZXJMUHlFcmp5CnJNS1dhQkZMbWZLL0FITkY0Wmlod1BHT2M3dzZVSGN6QlpYSDVSRnpKTm53dytXbkt1VFBJMEhmblZIOGxnPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+      tls.key: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFcEFJQkFBS0NBUUVBNys5cjhSMTNVQnk5UVZQRmtLQ3Y0bytnTkhPbkUyTFhLOTI5Y21GNVhDdkJOcG9BCmd2YnUzL2NpZWF0Smdncy9ua3htYmlhelJ0cldUcVY1aXVibEIrSjUxU3ZVWGtzRmNZS2ZmMjcyTmM0QUVYTncKWUVwWmZhNklyNVA0TEtnTnRMcmFWa3hmQWYxT1cyUXllS3IvSTU0Qy8vYjdxQTBhQy9pTWVaaTk5WWpxQlFJdQpyMHNEQ0VFc1Q3WnB2TU1KdEVRK0M0Unp3c3lZRGFIdENGcERWblgwSlNtaVJzZWFnVDZKR3ZKUlRya3k5alQ2CndNU0NIY0dYK3Y1Zk53ODN2SXVMbzNjd05YaHVlTExmdk9zU1NnaHR4VjhaeHZjMU90eTRXQmViUnpia3V4bjUKWEZCV2VFY1V2MUhBYXJRMkdIZVVlMnYyRUxVZ1FEWitGaWpFWndJREFRQUJBb0lCQUhDYWQ1a29FQWU4QlNIMAprOExGZHVZb0s3S1NHSFlqckFIOVJkeTVYRUJpbElId2tvN2tIc1ZqY1gyU1lxUXliVC80Y1JYKythSW1MKyttCi96eXVFZ3k2UUIxSVBabW5NYjNNNU5ma2xvNDN5SlpvQy9SVTBGMEluVU54ZVVaVDlHSytVcHV2cWVNQUkxY0cKMWgwRmUwb1c3U2Q5blN1SVFwSWRxcWVpaEh3SFJjblBzQWRJUHM2YlhBV1Jsak9jaXIxTkVZak9QNXIvYy9lWgpSWk5nUTZkQW5aWVNidlJsYi8wTlllMmJwUmdHS3RDdVhHNzY1d1daSDQzMi8rUzFZNS83S3ZxaHdLdll4akU5CnRiZTBPajlmZC83VExScDdGQ0VkRTdoemZUbWowTXYwWC9aS2NWMTJxdWtSMW5uSys0UTNVZ2E4NkFUSmlzQXgKbnVaUXByRUNnWUVBL0lZWVlOdmpCYnJrR2ZOVFByaHl4UkMxSDhYTEtvMkpkMjVjUTF6S3NIUXgrK3NTQm1uUwpsODE4eVBNdnYrdGt0UUhkWGhab1lTUU8ycVI5RzRDWGtkWWl5djUzbVhZb0pMVDJzRWl4TmdtdHhKSU51WG9HCjhwK3lSVzlZbzlrdDhhNW1oVTdSZldxby9aZlVFNlpValM3eWxmMjZiZXhuVDBhZlk3RkpweThDZ1lFQTh6ejIKdVI0ZlRSKzcyaklmOTdHVS9hSlNDdzROREY3MkpUdWJXWXRxNUlmOUdSY0dwVTJjR3lrSm1QcENreGEyT2NOSwpvR3k5V0ZSYzRBVTVKT3RBWHNRVjZUU25FV1VFeDF6NThkVkd1R083Qm0rTFBZdVdKOERtNkJhd1duNG1Cd1RtCmp5TzVRNEpUb3FXVEVjNktld3lTQUZ6OTVGRVNCR1lJRXhoVGFFa0NnWUVBNkNqd2FMdy9yNWp1OU55Ny84SGIKNGtsRisvd0FtUktlKzJvKzhMOXlxVjlxUk0wTk9WQTVDTThtbGlqZUVYZjhrbDB3Zzd2ZUl0RGZ4eXZLeVdvago3elFMc016YWNBQXRUL0gvaW5xS1ViLzhQZWg1TGJoK2dybEhVSWJaMjJsanovb2l6eFJ6alBadWZ4Y0RKejJZCkptU3ZLaTZuSTBCZ2lvWEhMQVJtVG9rQ2dZRUFnQ2N4a296bFR2d1dQRHJHanZrWUY1M0svaG9VRTkyQWNGTjgKWU94TWtFVjV1eHRmbS81TTdoNXIrUlo1dHdkelVQR3N3dU1ueTM3L1ErUmNuQy82UlRPb202cnJEd1liUTNLZwpHYU1WMUpadTlsQVVtNE9NeERzbExVaXU5NjZaR0gramZlMERjaWNiSzRseStDSEs0bFBZSktyWjljNGs0UDVrCjZMS2JWMGtDZ1lBdUpxWjdTUUIrL2c3QzFOSG5MVWxwTVQvcWlJZlpCV25tOWYrNDJLN2F6OVN0MWpUbUgrNGIKcDErL2FKWUhoOEljUllheDQ3NDBoYlY2WWc3TThyTmlYOUp5WnpHTmVKY1VDeFVSRWNhZEM1cWVBeGRzSHJ2cwp2RWFDSitUNlJVR3JLd0dPZXdlUFRtbExRa3Q1NU1qSlZzTllPS2JyWS9aMVpiUEp2OElzN2c9PQotLS0tLUVORCBSU0EgUFJJVkFURSBLRVktLS0tLQo=
+    ```
+### 本地伪集群环境的安装
+  - 安装Docker Desktop
+  - 配置proxy
+    ```bash
+    {
+        "registry-mirrors": [
+            "https://6n5qzb8y.mirror.aliyuncs.com"
+        ],
+        "features": {
+            "buildkit": true
+        },
+        "experimental": false,
+        "builder": {
+            "gc": {
+                "defaultKeepStorage": "20GB",
+                "enabled": true
+            }
+        }
+    }
+    ```
+- 安装 Kubernetes
+  ![Install Kubernetes with Mac Docker Desktop](/images/docs/WeChatWorkScreenshot_275776cd-a785-4e1f-926f-dce293eb6b7e.png)
+
+
+
 
 ### 实战部分
 * 在本地部署MySQL数据库
@@ -892,6 +951,81 @@ spec:
     ```
 
 
+* 在服务器上部署注册中心
+  * 创建deployment register_deployment.yml
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: register-server
+      namespace: test
+    spec:
+      selector:
+        matchLabels:
+          app: register-server
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app: register-server
+        spec:
+          containers:
+            - image: registry.gobuildrun.com/operation-br-app-engine/eureka-server:2019.8.2-180723-master
+              name: register-server
+              env:
+              - name: TZ
+                value: Asia/Shanghai
+              ports:
+              - containerPort: 8000
+                name: register-server
+    ```
+    ```bash
+    $ kubectl apply -f register_deployment.yml
+    ```
+  * 创建service register_service.yml
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: register-server
+      namespace: test
+    spec:
+      type: ClusterIP
+      ports:
+      - name: http
+        port: 8000
+        targetPort: 8000
+        protocol: TCP
+      selector:
+        app: register-server
+    ```
+    ```bash
+    $ kubectl apply -f register_service.yml
+    ```
+  * 创建ingress register_ingress.yml
+    ```yaml
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: ingress-wildcard-host
+      namespace: test
+    spec:
+      rules:
+      - host: register-tmis.timework.com
+        http:
+          paths:
+          - pathType: ImplementationSpecific
+            path: /
+            backend:
+              service:
+                name: register-server
+                port:
+                  number: 8000
+    ```
+    ```bash
+    $ kubectl apply -f register_ingress.yml
+    ```
 ##### 附录: Kubectl命令
 ```bash
 Usage:
